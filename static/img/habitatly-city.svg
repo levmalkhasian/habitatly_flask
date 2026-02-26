@@ -1,0 +1,27 @@
+<svg width="320" height="240" viewBox="0 0 320 240" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Habitatly city illustration</title>
+  <desc id="desc">Simple pastel city blocks and a house icon.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="320" y2="240" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0F2FE"/>
+      <stop offset="1" stop-color="#ECFEFF"/>
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="170" x2="320" y2="240" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CCFBF1"/>
+      <stop offset="1" stop-color="#E2E8F0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="320" height="240" rx="20" fill="url(#sky)"/>
+  <rect y="168" width="320" height="72" fill="url(#ground)"/>
+
+  <circle cx="60" cy="58" r="24" fill="#FDE68A"/>
+  <rect x="32" y="112" width="46" height="56" rx="8" fill="#A7F3D0"/>
+  <rect x="84" y="92" width="56" height="76" rx="8" fill="#7DD3FC"/>
+  <rect x="146" y="72" width="56" height="96" rx="8" fill="#BFDBFE"/>
+  <rect x="208" y="104" width="38" height="64" rx="8" fill="#A5B4FC"/>
+  <rect x="252" y="82" width="36" height="86" rx="8" fill="#93C5FD"/>
+
+  <path d="M124 178L160 150L196 178V212H174V190H146V212H124V178Z" fill="#0F766E"/>
+  <path d="M115 179L160 142L205 179" stroke="#115E59" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

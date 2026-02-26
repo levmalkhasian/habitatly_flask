@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-card">
+  <div class="results-head">
+    <div class="results-intro">
+      <h1>Recommended Cities</h1>
+      <p>Ranked by your selected preferences.</p>
+      {% if using_mongo %}
+        <p class="scale-help">Source: MongoDB cities collection.</p>
+      {% elif db_error %}
+        <p class="scale-help">MongoDB unavailable ({{ db_error }}). Showing local sample data.</p>
+      {% else %}
+        <p class="scale-help">Showing local sample data.</p>
+      {% endif %}
+    </div>
+    <img
+      class="result-illustration"
+      src="{{ url_for('static', filename='img/habitatly-city.svg') }}"
+      alt="City illustration"
+      loading="lazy"
+    />
+  </div>
+
+  {% if results %}
+    <article class="top-pick">
+      <p class="top-pick-label">Top Match</p>
+      <h2>{{ results[0].city }}</h2>
+      <p class="top-pick-score">Score: {{ results[0].score }}</p>
+    </article>
+
+    <ol class="results-list">
+      {% for row in results %}
+        <li class="result-item">
+          <div class="result-row">
+            <div class="result-city">
+              <span class="result-rank">#{{ loop.index }}</span>
+              <strong>{{ row.city }}</strong>
+            </div>
+            <span class="result-score">{{ row.score }}</span>
+          </div>
+          <div class="result-track" aria-hidden="true">
+            <span class="result-fill" style="width: {{ row.score }}%;"></span>
+          </div>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+
+  <div class="hero-actions">
+    <a class="btn ghost" href="{{ url_for('index') }}">Adjust Preferences</a>
+    <a class="btn primary" href="{{ url_for('index') }}">Try New Search</a>
+  </div>
+</section>
+{% endblock %}

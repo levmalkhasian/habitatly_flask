@@ -1,0 +1,35 @@
+<h1>Find My City</h1>
+
+<form method="POST" action="{{ url_for('results') }}">
+    <div class="field">
+    <label>Cost of Living: <span id="costVal">3</span></label>
+    <input type="range" name="w_cost" min="0" max="5" value="3"
+           oninput="costVal.textContent=this.value">
+  </div>
+
+  <div class="field">
+    <label>Safety: <span id="safetyVal">3</span></label>
+    <input type="range" name="w_safety" min="0" max="5" value="3"
+           oninput="safetyVal.textContent=this.value">
+  </div>
+
+  <div class="field">
+    <label>Jobs: <span id="jobsVal">3</span></label>
+    <input type="range" name="w_jobs" min="0" max="5" value="3"
+           oninput="jobsVal.textContent=this.value">
+  </div>
+
+  <div class="field">
+    <label>Weather: <span id="weatherVal">3</span></label>
+    <input type="range" name="w_weather" min="0" max="5" value="3"
+           oninput="weatherVal.textContent=this.value">
+  </div>
+
+  <div class="field">
+    <label>Lifestyle: <span id="lifeVal">3</span></label>
+    <input type="range" name="w_lifestyle" min="0" max="5" value="3"
+           oninput="lifeVal.textContent=this.value">
+  </div>
+
+  <button type="submit">Recommend Cities</button>
+</form>

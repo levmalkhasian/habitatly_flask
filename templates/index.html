@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero-card">
+  <div class="hero-layout">
+    <div>
+      <h1>Find Your City</h1>
+      <p>
+        Habitatly ranks cities by what matters most to <strong>you</strong>.
+      </p>
+      <p class="scale-help">
+        Use the sliders to set importance for each factor. Scale: <strong>0 = not important</strong>, <strong>5 = highest priority</strong>.
+        For Cost of Living, a higher setting favors more affordable cities.
+      </p>
+    </div>
+    <img
+      class="hero-illustration"
+      src="{{ url_for('static', filename='img/la-skyline.svg') }}"
+      alt="Los Angeles skyline at sunset"
+      loading="lazy"
+    />
+  </div>
+
+  <form method="POST" action="{{ url_for('results') }}" class="weights-form">
+    <div class="slider-row">
+      <label for="w_cost">Cost of Living <span id="costVal" class="slider-value">3</span></label>
+      <input id="w_cost" type="range" name="w_cost" min="0" max="5" value="3" oninput="costVal.textContent=this.value">
+      <p class="slider-help">Affordability</p>
+    </div>
+
+    <div class="slider-row">
+      <label for="w_safety">Safety <span id="safetyVal" class="slider-value">3</span></label>
+      <input id="w_safety" type="range" name="w_safety" min="0" max="5" value="3" oninput="safetyVal.textContent=this.value">
+      <p class="slider-help">Low crime and personal safety</p>
+    </div>
+
+    <div class="slider-row">
+      <label for="w_jobs">Jobs <span id="jobsVal" class="slider-value">3</span></label>
+      <input id="w_jobs" type="range" name="w_jobs" min="0" max="5" value="3" oninput="jobsVal.textContent=this.value">
+      <p class="slider-help">Job market strength</p>
+    </div>
+
+    <div class="slider-row">
+      <label for="w_weather">Weather <span id="weatherVal" class="slider-value">3</span></label>
+      <input id="w_weather" type="range" name="w_weather" min="0" max="5" value="3" oninput="weatherVal.textContent=this.value">
+      <p class="slider-help">Climate comfort</p>
+    </div>
+
+    <div class="slider-row">
+      <label for="w_lifestyle">Lifestyle <span id="lifeVal" class="slider-value">3</span></label>
+      <input id="w_lifestyle" type="range" name="w_lifestyle" min="0" max="5" value="3" oninput="lifeVal.textContent=this.value">
+      <p class="slider-help">Daily livability (environment + mobility)</p>
+    </div>
+
+    <div class="hero-actions">
+      <button type="submit" class="btn primary">See Results</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
