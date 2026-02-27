@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="$HOME/<REPO>"
+APP_DIR="$HOME/habitatly_flask"
 APP_FILE="app.py"
 PY="$APP_DIR/.venv/bin/python"
 
