@@ -24,8 +24,10 @@ set -a
 source .env
 set +a
 
-# Stop previous process (match exact command)
-pkill -f "$PY $APP_FILE" || true
+# Stop any previous process on port 5050 or matching app.py
+fuser -k 5050/tcp 2>/dev/null || true
+pkill -f "python.*$APP_FILE" || true
+sleep 1
 
 # Start new process
 nohup "$PY" "$APP_FILE" > log.txt 2>&1 &
