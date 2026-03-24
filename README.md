@@ -37,7 +37,7 @@ Set environment variables in `.env`:
 
 ```env
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/?retryWrites=true&w=majority
-MONGODB_DB_NAME=habitatly
+MONGODB_DB_NAME=habitatly_db
 ```
 
 MongoDB is optional. If `MONGODB_URI` is missing or connection fails, the app still runs and uses fallback data.
@@ -48,7 +48,7 @@ MongoDB is optional. If `MONGODB_URI` is missing or connection fails, the app st
 flask --app app run --debug
 ```
 
-Open `http://127.0.0.1:5000`.
+Open `http://127.0.0.1:5000` or AWS EC2 link.
 
 ## Routes
 

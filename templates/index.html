@@ -21,7 +21,21 @@
     />
   </div>
 
-  <form method="POST" action="{{ url_for('results') }}" class="weights-form">
+  {% if db_connected %}
+  <div class="import-bar">
+    <span class="city-count-badge">
+      {% if city_count > 0 %}
+        {{ city_count }} cities in database
+      {% else %}
+        No cities loaded yet
+      {% endif %}
+    </span>
+    <button type="button" id="importBtn" class="btn ghost btn-sm">Import US Cities</button>
+    <span id="importStatus" class="import-status" aria-live="polite"></span>
+  </div>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('results') }}" class="weights-form" id="mainForm">
     <div class="slider-row">
       <label for="w_cost">Cost of Living <span id="costVal" class="slider-value">3</span></label>
       <input id="w_cost" type="range" name="w_cost" min="0" max="5" value="3" oninput="costVal.textContent=this.value">
@@ -57,4 +71,43 @@
     </div>
   </form>
 </section>
+
+<script>
+  const importBtn = document.getElementById('importBtn');
+  if (importBtn) {
+    importBtn.addEventListener('click', async function () {
+      const status = document.getElementById('importStatus');
+      importBtn.disabled = true;
+      importBtn.textContent = 'Importing…';
+      status.textContent = '';
+      status.className = 'import-status';
+
+      try {
+        const body = new URLSearchParams({ limit: 20, country: 'United States' });
+        const res = await fetch('/import/cities', { method: 'POST', body });
+        const data = await res.json();
+
+        if (data.ok) {
+          status.textContent = `Done — ${data.imported} added, ${data.updated} updated.`;
+          status.className = 'import-status ok';
+          // refresh badge
+          const badge = document.querySelector('.city-count-badge');
+          if (badge) {
+            const total = (parseInt(badge.textContent) || 0) + data.imported;
+            badge.textContent = total + ' cities in database';
+          }
+        } else {
+          status.textContent = 'Error: ' + (data.error || 'unknown');
+          status.className = 'import-status err';
+        }
+      } catch (e) {
+        status.textContent = 'Network error.';
+        status.className = 'import-status err';
+      } finally {
+        importBtn.disabled = false;
+        importBtn.textContent = 'Import US Cities';
+      }
+    });
+  }
+</script>
 {% endblock %}

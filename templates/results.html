@@ -1,17 +1,22 @@
 {% extends "base.html" %}
 
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
 {% block content %}
-<section class="hero-card">
+<section class="results-page">
   <div class="results-head">
     <div class="results-intro">
-      <h1>Recommended Cities</h1>
-      <p>Ranked by your selected preferences.</p>
+      <h1>Your Top Cities</h1>
+      <p>Ranked by your preferences{% if results %} — {{ results|length }} matches{% endif %}.</p>
       {% if using_mongo %}
-        <p class="scale-help">Source: MongoDB cities collection.</p>
+        <p class="source-tag">Live database</p>
       {% elif db_error %}
-        <p class="scale-help">MongoDB unavailable ({{ db_error }}). Showing local sample data.</p>
+        <p class="source-tag warn">Sample data</p>
       {% else %}
-        <p class="scale-help">Showing local sample data.</p>
+        <p class="source-tag">Sample data</p>
       {% endif %}
     </div>
     <img
@@ -22,34 +27,230 @@
     />
   </div>
 
+  <div id="map" class="map-container"></div>
+
   {% if results %}
     <article class="top-pick">
-      <p class="top-pick-label">Top Match</p>
-      <h2>{{ results[0].city }}</h2>
-      <p class="top-pick-score">Score: {{ results[0].score }}</p>
+      <div class="top-pick-header">
+        <div class="top-pick-info">
+          <p class="top-pick-label">Best Match</p>
+          <h2>{{ results[0].city }}</h2>
+          <div class="quick-stats">
+            {% if results[0].population %}
+              <span class="stat"><span class="stat-label">Pop</span> {{ results[0].population }}</span>
+            {% endif %}
+            {% if results[0].avg_temp_f %}
+              <span class="stat"><span class="stat-label">Avg</span> {{ results[0].avg_temp_f }}°F</span>
+            {% endif %}
+            {% if results[0].cost_tier %}
+              <span class="stat"><span class="stat-label">Cost</span> {{ results[0].cost_tier }}</span>
+            {% endif %}
+          </div>
+          {% if results[0].strengths %}
+            <div class="strength-tags">
+              {% for s in results[0].strengths %}
+                <span class="tag">{{ s }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+        <div class="score-ring-wrap large">
+          <svg class="score-ring" viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--border)" stroke-width="2.5"/>
+            <circle class="score-ring-fill" cx="18" cy="18" r="15.9" fill="none" stroke="var(--accent)" stroke-width="2.5"
+              stroke-dasharray="{{ results[0].score | round | int }}, 100" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+          </svg>
+          <span class="score-ring-text">{{ results[0].score | round | int }}%</span>
+        </div>
+      </div>
+
+      <div class="top-pick-body">
+        <div class="top-pick-photo" data-city="{{ results[0].city.split(',')[0] }}">
+          <div class="photo-placeholder">Loading photo...</div>
+        </div>
+        <div class="top-pick-data">
+          {% if results[0].breakdown %}
+            <p class="breakdown-context">Compared to other cities in your results</p>
+            <div class="breakdown">
+              {% for cat, val in results[0].breakdown.items() %}
+                <div class="breakdown-row">
+                  <span class="breakdown-label">{{ cat }}</span>
+                  <div class="breakdown-track">
+                    <span class="breakdown-fill {% if val >= 70 %}high{% elif val >= 40 %}mid{% else %}low{% endif %}" style="width: {{ val }}%;"></span>
+                  </div>
+                  <span class="breakdown-val">{% if val >= 80 %}Excellent{% elif val >= 60 %}Good{% elif val >= 40 %}Average{% elif val >= 20 %}Low{% else %}Poor{% endif %}</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
     </article>
 
+    {% if results|length > 1 %}
     <ol class="results-list">
-      {% for row in results %}
+      {% for row in results[1:] %}
         <li class="result-item">
           <div class="result-row">
             <div class="result-city">
-              <span class="result-rank">#{{ loop.index }}</span>
+              <span class="result-rank">#{{ loop.index + 1 }}</span>
               <strong>{{ row.city }}</strong>
             </div>
-            <span class="result-score">{{ row.score }}</span>
+            <div class="score-ring-wrap small">
+              <svg class="score-ring" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--border)" stroke-width="3"/>
+                <circle class="score-ring-fill" cx="18" cy="18" r="15.9" fill="none" stroke="var(--accent)" stroke-width="3"
+                  stroke-dasharray="{{ row.score | round | int }}, 100" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+              </svg>
+              <span class="score-ring-text">{{ row.score | round | int }}%</span>
+            </div>
           </div>
+
+          <div class="quick-stats sm">
+            {% if row.population %}
+              <span class="stat"><span class="stat-label">Pop</span> {{ row.population }}</span>
+            {% endif %}
+            {% if row.avg_temp_f %}
+              <span class="stat"><span class="stat-label">Avg</span> {{ row.avg_temp_f }}°F</span>
+            {% endif %}
+            {% if row.cost_tier %}
+              <span class="stat"><span class="stat-label">Cost</span> {{ row.cost_tier }}</span>
+            {% endif %}
+          </div>
+
+          {% if row.strengths %}
+            <div class="strength-tags sm">
+              {% for s in row.strengths %}
+                <span class="tag sm">{{ s }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+
           <div class="result-track" aria-hidden="true">
             <span class="result-fill" style="width: {{ row.score }}%;"></span>
           </div>
+
+          <details class="result-details">
+            <summary>View breakdown</summary>
+            <div class="details-body">
+              <div class="detail-photo" data-city="{{ row.city.split(',')[0] }}">
+                <div class="photo-placeholder">Loading photo...</div>
+              </div>
+              {% if row.breakdown %}
+                <div class="breakdown">
+                  {% for cat, val in row.breakdown.items() %}
+                    <div class="breakdown-row">
+                      <span class="breakdown-label">{{ cat }}</span>
+                      <div class="breakdown-track">
+                        <span class="breakdown-fill {% if val >= 70 %}high{% elif val >= 40 %}mid{% else %}low{% endif %}" style="width: {{ val }}%;"></span>
+                      </div>
+                      <span class="breakdown-val">{% if val >= 80 %}Excellent{% elif val >= 60 %}Good{% elif val >= 40 %}Average{% elif val >= 20 %}Low{% else %}Poor{% endif %}</span>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </details>
         </li>
       {% endfor %}
     </ol>
+    {% endif %}
   {% endif %}
 
   <div class="hero-actions">
-    <a class="btn ghost" href="{{ url_for('index') }}">Adjust Preferences</a>
-    <a class="btn primary" href="{{ url_for('index') }}">Try New Search</a>
+    <a class="btn primary" href="{{ url_for('index') }}">Adjust Preferences</a>
   </div>
 </section>
+
+<script>
+  // -- Map --
+  const mapData = {{ map_data_json | safe }};
+  if (mapData.length > 0) {
+    const map = L.map('map', { scrollWheelZoom: false }).setView([mapData[0].lat, mapData[0].lon], 4);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
+      maxZoom: 18
+    }).addTo(map);
+
+    mapData.forEach(function (c, i) {
+      var radius = i === 0 ? 10 : 6;
+      var color = i === 0 ? '#3b82f6' : '#60a5fa';
+      L.circleMarker([c.lat, c.lon], {
+        radius: radius,
+        fillColor: color,
+        color: '#1e3a5f',
+        weight: 1.5,
+        fillOpacity: 0.9
+      }).addTo(map).bindPopup('<strong>' + c.city + '</strong><br>Score: ' + Math.round(c.score) + '%');
+    });
+
+    var bounds = L.latLngBounds(mapData.map(function (c) { return [c.lat, c.lon]; }));
+    map.fitBounds(bounds, { padding: [30, 30] });
+  } else {
+    document.getElementById('map').style.display = 'none';
+  }
+
+  // -- City photos via Wikipedia REST API --
+  async function loadPhoto(container) {
+    const city = container.dataset.city;
+    if (!city) return;
+
+    const slug = city.replace(/ /g, '_');
+    const attempts = [
+      'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(slug),
+      'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(slug + '_(city)'),
+      'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(slug + ',_Texas'),
+      'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(slug + ',_California'),
+    ];
+
+    for (const url of attempts) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (data.thumbnail && data.thumbnail.source) {
+          const src = data.thumbnail.source.replace(/\/\d+px-/, '/600px-');
+          container.innerHTML = '<img src="' + src + '" alt="' + city + '" loading="lazy" />';
+          return;
+        }
+      } catch (e) { continue; }
+    }
+
+    container.innerHTML = '<div class="photo-placeholder empty">' + city.charAt(0) + '</div>';
+  }
+
+  // Load top-pick photo immediately
+  document.querySelectorAll('.top-pick-photo').forEach(loadPhoto);
+
+  // Load detail photos on expand
+  document.querySelectorAll('.result-details').forEach(function (det) {
+    det.addEventListener('toggle', function () {
+      if (det.open) {
+        det.querySelectorAll('.detail-photo').forEach(function (el) {
+          if (!el.dataset.loaded) {
+            el.dataset.loaded = '1';
+            loadPhoto(el);
+          }
+        });
+      }
+    });
+  });
+
+  // -- Animate score rings on load --
+  document.querySelectorAll('.score-ring-fill').forEach(function (el) {
+    var target = el.getAttribute('stroke-dasharray');
+    el.setAttribute('stroke-dasharray', '0, 100');
+    setTimeout(function () {
+      el.style.transition = 'stroke-dasharray 0.8s ease';
+      el.setAttribute('stroke-dasharray', target);
+    }, 100);
+  });
+
+  // -- Animate breakdown bars on load --
+  document.querySelectorAll('.breakdown-fill').forEach(function (el) {
+    var w = el.style.width;
+    el.style.width = '0%';
+    setTimeout(function () { el.style.width = w; }, 150);
+  });
+</script>
 {% endblock %}

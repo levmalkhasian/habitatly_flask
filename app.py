@@ -6,6 +6,8 @@ from statistics import mean
 import certifi
 import requests
 from dotenv import load_dotenv
+import json
+
 from flask import Flask, jsonify, render_template, request
 from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.errors import PyMongoError
@@ -14,15 +16,29 @@ app = Flask(__name__)
 load_dotenv()
 
 WEIGHT_FIELDS = ("w_cost", "w_safety", "w_jobs", "w_weather", "w_lifestyle")
+FIELD_LABELS = {
+    "w_cost": "Cost",
+    "w_safety": "Safety",
+    "w_jobs": "Jobs",
+    "w_weather": "Weather",
+    "w_lifestyle": "Lifestyle",
+}
 
 CITY_PROFILES = (
-    {"city": "Austin", "w_cost": 3, "w_safety": 3, "w_jobs": 5, "w_weather": 4, "w_lifestyle": 5},
-    {"city": "Seattle", "w_cost": 2, "w_safety": 4, "w_jobs": 5, "w_weather": 2, "w_lifestyle": 4},
-    {"city": "Denver", "w_cost": 3, "w_safety": 4, "w_jobs": 4, "w_weather": 4, "w_lifestyle": 4},
-    {"city": "Raleigh", "w_cost": 4, "w_safety": 4, "w_jobs": 4, "w_weather": 4, "w_lifestyle": 3},
-    {"city": "San Diego", "w_cost": 1, "w_safety": 4, "w_jobs": 4, "w_weather": 5, "w_lifestyle": 5},
+    {"city": "Austin", "w_cost": 3, "w_safety": 3, "w_jobs": 5, "w_weather": 4, "w_lifestyle": 5,
+     "latitude": 30.27, "longitude": -97.74, "population": 979263, "avg_temp_f": 68.3, "cost_of_living_score": 55},
+    {"city": "Seattle", "w_cost": 2, "w_safety": 4, "w_jobs": 5, "w_weather": 2, "w_lifestyle": 4,
+     "latitude": 47.61, "longitude": -122.33, "population": 737015, "avg_temp_f": 52.0, "cost_of_living_score": 72},
+    {"city": "Denver", "w_cost": 3, "w_safety": 4, "w_jobs": 4, "w_weather": 4, "w_lifestyle": 4,
+     "latitude": 39.74, "longitude": -104.99, "population": 715522, "avg_temp_f": 50.1, "cost_of_living_score": 58},
+    {"city": "Raleigh", "w_cost": 4, "w_safety": 4, "w_jobs": 4, "w_weather": 4, "w_lifestyle": 3,
+     "latitude": 35.78, "longitude": -78.64, "population": 474069, "avg_temp_f": 60.0, "cost_of_living_score": 45},
+    {"city": "San Diego", "w_cost": 1, "w_safety": 4, "w_jobs": 4, "w_weather": 5, "w_lifestyle": 5,
+     "latitude": 32.72, "longitude": -117.16, "population": 1386932, "avg_temp_f": 64.5, "cost_of_living_score": 75},
 )
+EXTRA_FIELDS = ("latitude", "longitude", "population", "avg_temp_f", "cost_of_living_score")
 
+# 
 OPEN_DATA_CITIES_URL = (
     "https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/"
     "geonames-all-cities-with-a-population-1000/records"
@@ -160,6 +176,8 @@ def _load_city_profiles_from_mongo():
                 "environment_score": 1,
                 "mobility_score": 1,
                 "population": 1,
+                "latitude": 1,
+                "longitude": 1,
             },
         ).limit(500)
     except PyMongoError:
@@ -191,6 +209,11 @@ def _load_city_profiles_from_mongo():
                 "w_jobs": jobs_score if jobs_score is not None else 2.5,
                 "w_weather": weather_score if weather_score is not None else 2.5,
                 "w_lifestyle": lifestyle_score if lifestyle_score is not None else 2.5,
+                "latitude": doc.get("latitude"),
+                "longitude": doc.get("longitude"),
+                "population": doc.get("population"),
+                "avg_temp_f": doc.get("avg_temp_f"),
+                "cost_of_living_score": doc.get("cost_of_living_score"),
             }
         )
     return profiles
@@ -215,6 +238,9 @@ def _normalize_profiles(profiles):
                 row[field] = (profile[field] - min_value) / (max_value - min_value)
             else:
                 row[field] = 0.5
+        for field in EXTRA_FIELDS:
+            if field in profile:
+                row[field] = profile[field]
         append_normalized(row)
     return normalized
 
@@ -427,6 +453,8 @@ def import_cities():
             "name": city["name"],
             "state": city["state"],
             "country": city["country"],
+            "latitude": city["latitude"],
+            "longitude": city["longitude"],
             "rent_usd": None,
             "avg_temp_f": avg_temp_f,
             "population": city.get("population"),
@@ -486,12 +514,66 @@ def results():
     for profile in ranking_profiles:
         weighted_sum = sum(weights[field] * profile[field] for field in WEIGHT_FIELDS)
         score = (weighted_sum / weight_total) * 100.0
-        append_result({"city": profile["city"], "score": round(score, 2)})
+
+        breakdown = {}
+        for field in WEIGHT_FIELDS:
+            label = FIELD_LABELS[field]
+            breakdown[label] = round(profile[field] * 100)
+
+        sorted_cats = sorted(breakdown.items(), key=lambda x: x[1], reverse=True)
+        top_strengths = [cat for cat, val in sorted_cats if val >= 55][:3]
+        if not top_strengths:
+            top_strengths = [sorted_cats[0][0]] if sorted_cats else []
+
+        pop = profile.get("population")
+        temp = profile.get("avg_temp_f")
+        cost = profile.get("cost_of_living_score")
+
+        if cost is None:
+            cost_tier = None
+        elif cost < 30:
+            cost_tier = "Low"
+        elif cost < 55:
+            cost_tier = "Moderate"
+        elif cost < 75:
+            cost_tier = "High"
+        else:
+            cost_tier = "Very High"
+
+        if pop is None:
+            pop_display = None
+        elif pop >= 1_000_000:
+            pop_display = f"{pop / 1_000_000:.1f}M"
+        elif pop >= 1_000:
+            pop_display = f"{pop / 1_000:.0f}K"
+        else:
+            pop_display = str(int(pop))
+
+        append_result({
+            "city": profile["city"],
+            "score": round(score, 2),
+            "breakdown": breakdown,
+            "strengths": top_strengths,
+            "population": pop_display,
+            "avg_temp_f": f"{round(temp)}" if temp else None,
+            "cost_tier": cost_tier,
+            "latitude": profile.get("latitude"),
+            "longitude": profile.get("longitude"),
+        })
 
     city_results.sort(key=lambda row: row["score"], reverse=True)
+    city_results = city_results[:20]
+
+    map_data = [
+        {"city": r["city"], "lat": r["latitude"], "lon": r["longitude"], "score": r["score"]}
+        for r in city_results
+        if r.get("latitude") and r.get("longitude")
+    ]
+
     return render_template(
         "results.html",
         results=city_results,
+        map_data_json=json.dumps(map_data),
         using_mongo=CITIES_COLLECTION is not None,
         db_error=MONGO_ERROR,
     )
