@@ -1,3 +1,4 @@
+import json
 import math
 import os
 from datetime import datetime, timedelta, timezone
@@ -6,8 +7,6 @@ from statistics import mean
 import certifi
 import requests
 from dotenv import load_dotenv
-import json
-
 from flask import Flask, jsonify, render_template, request
 from pymongo import ASCENDING, DESCENDING, MongoClient
 from pymongo.errors import PyMongoError
@@ -38,12 +37,28 @@ CITY_PROFILES = (
 )
 EXTRA_FIELDS = ("latitude", "longitude", "population", "avg_temp_f", "cost_of_living_score")
 
-# 
 OPEN_DATA_CITIES_URL = (
     "https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/"
     "geonames-all-cities-with-a-population-1000/records"
 )
+
+US_STATE_CODES = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
+    "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming", "DC": "District of Columbia",
+}
 OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+TELEPORT_BASE = "https://api.teleport.org/api"
 
 
 class ImportSourceError(RuntimeError):
@@ -149,6 +164,7 @@ def _init_cities_collection():
         cities.create_index([("name", ASCENDING), ("state", ASCENDING), ("country", ASCENDING)], unique=True)
         cities.create_index([("external_id", ASCENDING)], unique=True, sparse=True)
         cities.create_index([("quality_score", DESCENDING)])
+        cities.create_index([("country", ASCENDING)])
         return client, cities, None
     except PyMongoError as exc:
         return None, None, f"MongoDB connection failed: {exc.__class__.__name__}"
@@ -157,34 +173,28 @@ def _init_cities_collection():
 MONGO_CLIENT, CITIES_COLLECTION, MONGO_ERROR = _init_cities_collection()
 
 
-def _load_city_profiles_from_mongo():
+def _load_city_profiles_from_mongo(country_filter=None):
     if CITIES_COLLECTION is None:
         return []
 
+    query = {}
+    if country_filter:
+        query["country"] = country_filter
+
     try:
         docs = CITIES_COLLECTION.find(
-            {},
+            query,
             {
-                "name": 1,
-                "state": 1,
-                "country": 1,
-                "cost_of_living_score": 1,
-                "safety_score": 1,
-                "quality_score": 1,
-                "jobs_score": 1,
-                "avg_temp_f": 1,
-                "environment_score": 1,
-                "mobility_score": 1,
-                "population": 1,
-                "latitude": 1,
-                "longitude": 1,
+                "name": 1, "state": 1, "country": 1,
+                "cost_of_living_score": 1, "safety_score": 1, "quality_score": 1,
+                "jobs_score": 1, "avg_temp_f": 1, "environment_score": 1,
+                "mobility_score": 1, "population": 1, "latitude": 1, "longitude": 1,
             },
         ).limit(500)
     except PyMongoError:
         return []
 
     profiles = []
-    append_profile = profiles.append
     for doc in docs:
         cost_score = _affordability_to_5(doc.get("cost_of_living_score"))
         safety_score = _score_100_to_5(doc.get("safety_score"))
@@ -198,25 +208,64 @@ def _load_city_profiles_from_mongo():
             _score_100_to_5(doc.get("environment_score")),
             _score_100_to_5(doc.get("mobility_score")),
         ]
-        lifestyle_values = [value for value in lifestyle_scores if value is not None]
+        lifestyle_values = [v for v in lifestyle_scores if v is not None]
         lifestyle_score = sum(lifestyle_values) / len(lifestyle_values) if lifestyle_values else None
 
-        append_profile(
-            {
-                "city": _build_city_name(doc),
-                "w_cost": cost_score if cost_score is not None else 2.5,
-                "w_safety": safety_score if safety_score is not None else 2.5,
-                "w_jobs": jobs_score if jobs_score is not None else 2.5,
-                "w_weather": weather_score if weather_score is not None else 2.5,
-                "w_lifestyle": lifestyle_score if lifestyle_score is not None else 2.5,
-                "latitude": doc.get("latitude"),
-                "longitude": doc.get("longitude"),
-                "population": doc.get("population"),
-                "avg_temp_f": doc.get("avg_temp_f"),
-                "cost_of_living_score": doc.get("cost_of_living_score"),
-            }
-        )
+        profiles.append({
+            "city": _build_city_name(doc),
+            "w_cost": cost_score if cost_score is not None else 2.5,
+            "w_safety": safety_score if safety_score is not None else 2.5,
+            "w_jobs": jobs_score if jobs_score is not None else 2.5,
+            "w_weather": weather_score if weather_score is not None else 2.5,
+            "w_lifestyle": lifestyle_score if lifestyle_score is not None else 2.5,
+            "latitude": doc.get("latitude"),
+            "longitude": doc.get("longitude"),
+            "population": doc.get("population"),
+            "avg_temp_f": doc.get("avg_temp_f"),
+            "cost_of_living_score": doc.get("cost_of_living_score"),
+        })
     return profiles
+
+
+COUNTRY_DISPLAY_NAMES = {
+    "Russian Federation": "Russia",
+    "Korea, Republic of": "South Korea",
+    "Korea, Democratic People's Republic of": "North Korea",
+    "Vietnam": "Vietnam",
+    "Congo, Democratic Republic of the": "DR Congo",
+    "Congo, The Democratic Republic of the": "DR Congo",
+    "Tanzania, United Republic of": "Tanzania",
+    "Syrian Arab Republic": "Syria",
+    "Iran, Islamic Republic of": "Iran",
+    "Bolivia, Plurinational State of": "Bolivia",
+    "Venezuela, Bolivarian Republic of": "Venezuela",
+    "Lao People's Democratic Republic": "Laos",
+    "Moldova, Republic of": "Moldova",
+    "Macedonia, the Former Yugoslav Republic of": "North Macedonia",
+    "Micronesia, Federated States of": "Micronesia",
+}
+
+
+def _display_country(name):
+    return COUNTRY_DISPLAY_NAMES.get(name, name)
+
+
+def _get_available_countries():
+    if CITIES_COLLECTION is None:
+        return []
+    try:
+        raw = CITIES_COLLECTION.distinct("country")
+        seen = {}
+        for c in raw:
+            if c:
+                display = _display_country(c)
+                seen[display] = c  # display name → raw DB value
+        items = sorted(seen.items())
+        us = [i for i in items if i[1] == "United States"]
+        rest = [i for i in items if i[1] != "United States"]
+        return us + rest
+    except PyMongoError:
+        return []
 
 
 def _normalize_profiles(profiles):
@@ -229,7 +278,6 @@ def _normalize_profiles(profiles):
         field_bounds[field] = (min(values), max(values))
 
     normalized = []
-    append_normalized = normalized.append
     for profile in profiles:
         row = {"city": profile["city"]}
         for field in WEIGHT_FIELDS:
@@ -241,7 +289,7 @@ def _normalize_profiles(profiles):
         for field in EXTRA_FIELDS:
             if field in profile:
                 row[field] = profile[field]
-        append_normalized(row)
+        normalized.append(row)
     return normalized
 
 
@@ -253,7 +301,7 @@ def _request_json(url, *, params=None):
             timeout=20,
             headers={
                 "Accept": "application/json",
-                "User-Agent": "flask-base-app/1.0 (+city-import)",
+                "User-Agent": "habitatly/1.0",
             },
         )
         response.raise_for_status()
@@ -288,63 +336,63 @@ def _fetch_city_candidates(limit, country=""):
         where_clauses.append(f"cou_name_en = '{_escape_odsql_string(normalized_country)}'")
     where_expr = " and ".join(where_clauses)
 
-    query_variants = (
-        {
-            "limit": limit,
-            "select": "name,cou_name_en,coordinates,population",
-            "where": where_expr,
-            "order_by": "-population",
-        },
-        {
-            "limit": limit,
-            "select": "name,cou_name_en,coordinates,population",
-            "where": where_expr,
-        },
-        {
-            "limit": limit,
-            "select": "name,cou_name_en,coordinates,population",
-        },
-    )
-
-    payload = None
-    errors = []
-    for params in query_variants:
-        try:
-            payload = _request_json(OPEN_DATA_CITIES_URL, params=params)
-            break
-        except ImportSourceError as exc:
-            errors.append(str(exc))
-
-    if payload is None:
-        raise ImportSourceError(" | ".join(errors[-2:]) if errors else "No source query could be completed.")
+    fields = "name,cou_name_en,coordinates,population,admin1_code"
+    api_limit = 100  # max per API request
 
     candidates = []
-    append_candidate = candidates.append
-    for row in payload.get("results", []):
-        name = (row.get("name") or "").strip()
-        country = (row.get("cou_name_en") or "").strip()
-        coords = row.get("coordinates") or {}
-        lat = _to_float(coords.get("lat"))
-        lon = _to_float(coords.get("lon"))
-        population = _to_float(row.get("population"))
+    seen = set()
+    offset = 0
 
-        if not name or not country or lat is None or lon is None:
-            continue
-        if normalized_country and country.lower() != normalized_country.lower():
-            continue
+    while len(candidates) < limit:
+        batch_size = min(api_limit, limit - len(candidates))
+        params = {"limit": batch_size, "offset": offset, "select": fields,
+                  "where": where_expr, "order_by": "-population"}
+        try:
+            payload = _request_json(OPEN_DATA_CITIES_URL, params=params)
+        except ImportSourceError:
+            if offset == 0:
+                raise
+            break
 
-        append_candidate(
-            {
+        results = payload.get("results", [])
+        if not results:
+            break
+
+        for row in results:
+            name = (row.get("name") or "").strip()
+            country = (row.get("cou_name_en") or "").strip()
+            coords = row.get("coordinates") or {}
+            lat = _to_float(coords.get("lat"))
+            lon = _to_float(coords.get("lon"))
+            population = _to_float(row.get("population"))
+
+            if not name or not country or lat is None or lon is None:
+                continue
+            if normalized_country and country.lower() != normalized_country.lower():
+                continue
+
+            dedup_key = (name.lower(), country.lower())
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+
+            admin1 = (row.get("admin1_code") or "").strip()
+            state = ""
+            if country == "United States" and admin1 in US_STATE_CODES:
+                state = US_STATE_CODES[admin1]
+
+            candidates.append({
                 "name": name,
                 "country": country,
-                "state": "",
+                "state": state,
                 "latitude": lat,
                 "longitude": lon,
                 "population": int(population) if population is not None else None,
-            }
-        )
+            })
 
-    return candidates
+        offset += len(results)
+
+    return candidates[:limit]
 
 
 def _fetch_annual_avg_temp_f(latitude, longitude):
@@ -367,7 +415,7 @@ def _fetch_annual_avg_temp_f(latitude, longitude):
 
     payload = response.json()
     values = payload.get("daily", {}).get("temperature_2m_mean", [])
-    clean_values = [value for value in values if isinstance(value, (float, int))]
+    clean_values = [v for v in values if isinstance(v, (float, int))]
     if not clean_values:
         return None
 
@@ -402,19 +450,104 @@ def _estimate_scores(population, avg_temp_f):
     }
 
 
+# ---- Teleport helpers ----
+
+def _teleport_scores_to_db(raw):
+    """Convert Teleport scores (0-10) to 0-100 DB fields."""
+    def s(key):
+        v = raw.get(key)
+        return round(_clamp(v * 10, 0, 100), 1) if v is not None else None
+
+    cost_raw = s("Cost of Living")
+    cost_of_living_score = round(100.0 - (cost_raw or 50.0), 1)
+    safety_score = s("Safety") or 50.0
+
+    jobs_parts = [v for v in [s("Startups"), s("Economy"), s("Business Freedom")] if v is not None]
+    jobs_score = round(sum(jobs_parts) / len(jobs_parts), 1) if jobs_parts else None
+
+    env_parts = [v for v in [s("Environmental Quality"), s("Outdoors")] if v is not None]
+    environment_score = round(sum(env_parts) / len(env_parts), 1) if env_parts else None
+
+    mob_parts = [v for v in [s("Healthcare"), s("Leisure & Culture"), s("Education")] if v is not None]
+    mobility_score = round(sum(mob_parts) / len(mob_parts), 1) if mob_parts else None
+
+    affordability = 100.0 - (cost_raw or 50.0)
+    quality_score = _quality_score(safety_score, affordability, jobs_score, environment_score, mobility_score)
+
+    return {
+        "cost_of_living_score": cost_of_living_score,
+        "safety_score": safety_score,
+        "jobs_score": jobs_score,
+        "environment_score": environment_score,
+        "mobility_score": mobility_score,
+        "quality_score": quality_score,
+    }
+
+
+def _fetch_teleport_urban_areas(limit):
+    data = _request_json(f"{TELEPORT_BASE}/urban_areas/")
+    return data.get("_links", {}).get("ua:item", [])[:limit]
+
+
+def _fetch_teleport_scores(slug):
+    try:
+        data = _request_json(f"{TELEPORT_BASE}/urban_areas/slug:{slug}/scores/")
+        return {cat["name"]: cat["score_out_of_10"] for cat in data.get("categories", [])}
+    except ImportSourceError:
+        return {}
+
+
+def _fetch_teleport_primary_city(slug):
+    try:
+        data = _request_json(f"{TELEPORT_BASE}/urban_areas/slug:{slug}/cities/")
+        cities = data.get("_links", {}).get("ua:cities", [])
+        if not cities:
+            return None
+        city_data = _request_json(cities[0]["href"])
+        full_name = city_data.get("full_name", "")
+        parts = [p.strip() for p in full_name.split(",")]
+        name = parts[0] if parts else slug
+        country = parts[-1] if len(parts) >= 2 else ""
+        state = parts[1] if len(parts) >= 3 else ""
+        latlon = city_data.get("location", {}).get("latlon", {})
+        return {
+            "name": name,
+            "state": state,
+            "country": country,
+            "latitude": latlon.get("latitude"),
+            "longitude": latlon.get("longitude"),
+            "population": city_data.get("population"),
+        }
+    except (ImportSourceError, KeyError):
+        return None
+
+
+# ---- Routes ----
+
 @app.route("/")
 def index():
-    return render_template("index.html")
+    city_count = 0
+    if CITIES_COLLECTION is not None:
+        try:
+            city_count = CITIES_COLLECTION.count_documents({})
+        except PyMongoError:
+            pass
+    countries = _get_available_countries()
+    return render_template(
+        "index.html",
+        city_count=city_count,
+        db_connected=CITIES_COLLECTION is not None,
+        countries=countries,
+    )
 
 
-@app.post("/import/teleport")
 @app.post("/import/cities")
 @app.post("/import/us-cities")
 def import_cities():
     if CITIES_COLLECTION is None:
         return jsonify({"ok": False, "error": MONGO_ERROR or "MongoDB not configured"}), 503
 
-    limit = _clamp(_parse_int(request.form, "limit", default=15), 1, 100)
+    limit = _clamp(_parse_int(request.form, "limit", default=15), 1, 250)
     requested_country = request.form.get("country", "")
     if request.path.endswith("/import/us-cities") and not requested_country:
         requested_country = "United States"
@@ -441,7 +574,7 @@ def import_cities():
         try:
             avg_temp_f = _fetch_annual_avg_temp_f(city["latitude"], city["longitude"])
         except WeatherAPIError:
-            avg_temp_f = None
+            pass
 
         scores = _estimate_scores(city.get("population"), avg_temp_f)
 
@@ -466,31 +599,25 @@ def import_cities():
             "quality_score": scores["quality_score"],
             "data_sources": {
                 "import": "opendatasoft_geonames",
-                "avg_temp_f": "open_meteo_archive",
                 "scoring": "estimated_from_population_and_temperature",
             },
             "updated_at": datetime.now(timezone.utc),
         }
 
         try:
-            upsert_result = CITIES_COLLECTION.update_one(
+            result = CITIES_COLLECTION.update_one(
                 {"external_id": city_doc["external_id"]},
-                {
-                    "$set": city_doc,
-                    "$setOnInsert": {"created_at": datetime.now(timezone.utc)},
-                },
+                {"$set": city_doc, "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
                 upsert=True,
             )
+            if result.upserted_id is not None:
+                summary["imported"] += 1
+            else:
+                summary["updated"] += 1
         except PyMongoError as exc:
             summary["failed"] += 1
             if len(summary["errors"]) < 5:
                 summary["errors"].append(f"Mongo write failed: {exc.__class__.__name__}")
-            continue
-
-        if upsert_result.upserted_id is not None:
-            summary["imported"] += 1
-        else:
-            summary["updated"] += 1
 
     if summary["imported"] == 0 and summary["updated"] == 0 and not summary["errors"]:
         summary["failed"] = limit
@@ -499,10 +626,113 @@ def import_cities():
     return jsonify(summary), 200
 
 
-@app.post("/results")
+@app.post("/import/teleport")
+def import_teleport_cities():
+    if CITIES_COLLECTION is None:
+        return jsonify({"ok": False, "error": MONGO_ERROR or "MongoDB not configured"}), 503
+
+    limit = _clamp(_parse_int(request.form, "limit", default=50), 1, 260)
+
+    summary = {
+        "ok": True,
+        "source": "teleport",
+        "requested_limit": limit,
+        "imported": 0,
+        "updated": 0,
+        "failed": 0,
+        "errors": [],
+    }
+
+    try:
+        urban_areas = _fetch_teleport_urban_areas(limit)
+    except ImportSourceError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+
+    for ua in urban_areas:
+        href = ua.get("href", "")
+        slug = href.rstrip("/").split("/")[-1].replace("slug:", "")
+        if not slug:
+            summary["failed"] += 1
+            continue
+
+        raw_scores = _fetch_teleport_scores(slug)
+        city_info = _fetch_teleport_primary_city(slug)
+
+        if city_info is None:
+            summary["failed"] += 1
+            continue
+
+        avg_temp_f = None
+        if city_info.get("latitude") and city_info.get("longitude"):
+            try:
+                avg_temp_f = _fetch_annual_avg_temp_f(city_info["latitude"], city_info["longitude"])
+            except WeatherAPIError:
+                pass
+
+        scores = _teleport_scores_to_db(raw_scores) if raw_scores else _estimate_scores(
+            city_info.get("population"), avg_temp_f
+        )
+
+        city_doc = {
+            "external_id": f"teleport:{slug}",
+            "name": city_info["name"],
+            "state": city_info.get("state", ""),
+            "country": city_info["country"],
+            "latitude": city_info["latitude"],
+            "longitude": city_info["longitude"],
+            "avg_temp_f": avg_temp_f,
+            "population": city_info.get("population"),
+            "safety_score": scores["safety_score"],
+            "cost_of_living_score": scores["cost_of_living_score"],
+            "jobs_score": scores["jobs_score"],
+            "mobility_score": scores.get("mobility_score"),
+            "environment_score": scores.get("environment_score"),
+            "quality_score": scores["quality_score"],
+            "data_sources": {
+                "import": "teleport",
+                "scoring": "teleport_quality_of_life" if raw_scores else "estimated",
+            },
+            "updated_at": datetime.now(timezone.utc),
+        }
+
+        try:
+            result = CITIES_COLLECTION.update_one(
+                {"external_id": city_doc["external_id"]},
+                {"$set": city_doc, "$setOnInsert": {"created_at": datetime.now(timezone.utc)}},
+                upsert=True,
+            )
+            if result.upserted_id is not None:
+                summary["imported"] += 1
+            else:
+                summary["updated"] += 1
+        except PyMongoError as exc:
+            summary["failed"] += 1
+            if len(summary["errors"]) < 5:
+                summary["errors"].append(str(exc.__class__.__name__))
+
+    return jsonify(summary), 200
+
+
+def _explain_match(breakdown):
+    """Generate a one-liner explaining why a city matched."""
+    if not breakdown:
+        return ""
+    sorted_cats = sorted(breakdown.items(), key=lambda x: x[1], reverse=True)
+    top2 = [cat.lower() for cat, _ in sorted_cats[:2]]
+    weakest_cat, weakest_val = sorted_cats[-1]
+    if weakest_val >= 70:
+        return f"A well-rounded pick — excels in {top2[0]} and {top2[1]}."
+    if weakest_val >= 40:
+        return f"Strong on {top2[0]} and {top2[1]}, with room to grow on {weakest_cat.lower()}."
+    return f"Stands out for {top2[0]} and {top2[1]}, but {weakest_cat.lower()} lags behind."
+
+
+@app.route("/results", methods=["GET", "POST"])
 def results():
-    weights = {field: _parse_weight(request.form, field) for field in WEIGHT_FIELDS}
-    profiles = _load_city_profiles_from_mongo() or CITY_PROFILES
+    weights = {field: _parse_weight(request.values, field) for field in WEIGHT_FIELDS}
+    country_filter = request.values.get("country_filter", "").strip()
+
+    profiles = _load_city_profiles_from_mongo(country_filter=country_filter or None) or CITY_PROFILES
     ranking_profiles = _normalize_profiles(profiles)
     weight_total = sum(weights.values())
     if weight_total <= 0:
@@ -510,16 +740,11 @@ def results():
         weights = {field: 1 for field in WEIGHT_FIELDS}
 
     city_results = []
-    append_result = city_results.append
     for profile in ranking_profiles:
         weighted_sum = sum(weights[field] * profile[field] for field in WEIGHT_FIELDS)
         score = (weighted_sum / weight_total) * 100.0
 
-        breakdown = {}
-        for field in WEIGHT_FIELDS:
-            label = FIELD_LABELS[field]
-            breakdown[label] = round(profile[field] * 100)
-
+        breakdown = {FIELD_LABELS[f]: round(profile[f] * 100) for f in WEIGHT_FIELDS}
         sorted_cats = sorted(breakdown.items(), key=lambda x: x[1], reverse=True)
         top_strengths = [cat for cat, val in sorted_cats if val >= 55][:3]
         if not top_strengths:
@@ -549,11 +774,12 @@ def results():
         else:
             pop_display = str(int(pop))
 
-        append_result({
+        city_results.append({
             "city": profile["city"],
             "score": round(score, 2),
             "breakdown": breakdown,
             "strengths": top_strengths,
+            "reason": _explain_match(breakdown),
             "population": pop_display,
             "avg_temp_f": f"{round(temp)}" if temp else None,
             "cost_tier": cost_tier,
@@ -573,7 +799,10 @@ def results():
     return render_template(
         "results.html",
         results=city_results,
+        weights=weights,
+        country_filter_raw=country_filter,
         map_data_json=json.dumps(map_data),
+        country_filter=_display_country(country_filter) if country_filter else "",
         using_mongo=CITIES_COLLECTION is not None,
         db_error=MONGO_ERROR,
     )

@@ -4,18 +4,26 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Habitatly</title>
+  <script>
+    (function() {
+      var t = localStorage.getItem('habitatly-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
   {% block head %}{% endblock %}
 </head>
 <body>
   <header class="site-header">
     <div class="header-inner">
-      <a class="brand" href="{{ url_for('index') }}" aria-label="Habitatly home">
-        <span>Habitatly 🏡</span>
-      </a>
+      <a class="brand" href="{{ url_for('index') }}" aria-label="Habitatly home"><span class="brand-icon">&#8962;</span> Habitatly</a>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+        <span class="theme-icon-dark">&#9789;</span>
+        <span class="theme-icon-light">&#9788;</span>
+      </button>
     </div>
   </header>
 
@@ -28,8 +36,17 @@
   <footer class="site-footer">
     <div class="container footer-inner">
       <p class="footer-brand">Habitatly</p>
-      <p class="footer-copy">Simple city matching for real-world priorities.</p>
+      <p class="footer-copy">City matching for real-world priorities.</p>
     </div>
   </footer>
+
+  <script>
+    function toggleTheme() {
+      var current = document.documentElement.getAttribute('data-theme') || 'light';
+      var next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('habitatly-theme', next);
+    }
+  </script>
 </body>
 </html>

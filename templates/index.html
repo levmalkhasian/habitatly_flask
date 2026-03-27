@@ -1,113 +1,380 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="hero-card">
-  <div class="hero-layout">
-    <div>
-      <h1>Find Your City</h1>
-      <p>
-        Habitatly ranks cities by what matters most to <strong>you</strong>.
-      </p>
-      <p class="scale-help">
-        Use the sliders to set importance for each factor. Scale: <strong>0 = not important</strong>, <strong>5 = highest priority</strong>.
-        For Cost of Living, a higher setting favors more affordable cities.
-      </p>
+<section class="quiz-container">
+
+  <!-- ====== WELCOME SCREEN ====== -->
+  <div id="quizWelcome" class="quiz-screen quiz-welcome active">
+
+    <div class="destination-ticker" aria-hidden="true">
+      <div class="ticker-track">
+        <span>Tokyo</span><span class="ticker-dot">&middot;</span>
+        <span>Paris</span><span class="ticker-dot">&middot;</span>
+        <span>Austin</span><span class="ticker-dot">&middot;</span>
+        <span>Berlin</span><span class="ticker-dot">&middot;</span>
+        <span>Melbourne</span><span class="ticker-dot">&middot;</span>
+        <span>Lisbon</span><span class="ticker-dot">&middot;</span>
+        <span>Seoul</span><span class="ticker-dot">&middot;</span>
+        <span>Cape Town</span><span class="ticker-dot">&middot;</span>
+        <span>Denver</span><span class="ticker-dot">&middot;</span>
+        <span>Buenos Aires</span><span class="ticker-dot">&middot;</span>
+        <span>Bangkok</span><span class="ticker-dot">&middot;</span>
+        <span>Amsterdam</span><span class="ticker-dot">&middot;</span>
+        <span>Portland</span><span class="ticker-dot">&middot;</span>
+        <span>Barcelona</span><span class="ticker-dot">&middot;</span>
+        <span>Vancouver</span><span class="ticker-dot">&middot;</span>
+        <span>Nairobi</span><span class="ticker-dot">&middot;</span>
+        <span>Dubai</span><span class="ticker-dot">&middot;</span>
+        <span>London</span><span class="ticker-dot">&middot;</span>
+        <!-- duplicate for seamless loop -->
+        <span>Tokyo</span><span class="ticker-dot">&middot;</span>
+        <span>Paris</span><span class="ticker-dot">&middot;</span>
+        <span>Austin</span><span class="ticker-dot">&middot;</span>
+        <span>Berlin</span><span class="ticker-dot">&middot;</span>
+        <span>Melbourne</span><span class="ticker-dot">&middot;</span>
+        <span>Lisbon</span><span class="ticker-dot">&middot;</span>
+        <span>Seoul</span><span class="ticker-dot">&middot;</span>
+        <span>Cape Town</span><span class="ticker-dot">&middot;</span>
+        <span>Denver</span><span class="ticker-dot">&middot;</span>
+        <span>Buenos Aires</span><span class="ticker-dot">&middot;</span>
+        <span>Bangkok</span><span class="ticker-dot">&middot;</span>
+        <span>Amsterdam</span><span class="ticker-dot">&middot;</span>
+        <span>Portland</span><span class="ticker-dot">&middot;</span>
+        <span>Barcelona</span><span class="ticker-dot">&middot;</span>
+        <span>Vancouver</span><span class="ticker-dot">&middot;</span>
+        <span>Nairobi</span><span class="ticker-dot">&middot;</span>
+        <span>Dubai</span><span class="ticker-dot">&middot;</span>
+        <span>London</span><span class="ticker-dot">&middot;</span>
+      </div>
     </div>
-    <img
-      class="hero-illustration"
-      src="{{ url_for('static', filename='img/la-skyline.svg') }}"
-      alt="Los Angeles skyline at sunset"
-      loading="lazy"
-    />
+
+    <h1>Find Your<br><span class="accent">Perfect City</span></h1>
+    <p class="quiz-subtitle">Answer 15 quick tradeoffs. We'll figure out what actually matters to you.</p>
+
+    {% if countries %}
+    <div class="country-filter-wrap">
+      <label for="countryFilter">Narrow by country</label>
+      <select id="countryFilter" class="country-select">
+        <option value="">Anywhere in the world</option>
+        {% for display, raw in countries %}
+          <option value="{{ raw }}">{{ display }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <button type="button" class="btn primary" onclick="startQuiz()">Start the Quiz</button>
   </div>
 
-  {% if db_connected %}
-  <div class="import-bar">
-    <span class="city-count-badge">
-      {% if city_count > 0 %}
-        {{ city_count }} cities in database
-      {% else %}
-        No cities loaded yet
-      {% endif %}
-    </span>
-    <button type="button" id="importBtn" class="btn ghost btn-sm">Import US Cities</button>
-    <span id="importStatus" class="import-status" aria-live="polite"></span>
+  <!-- ====== QUESTIONS SCREEN ====== -->
+  <div id="quizQuestions" class="quiz-screen">
+    <div class="quiz-progress-wrap">
+      <div class="quiz-progress">
+        <div class="quiz-progress-fill" id="progressFill"></div>
+      </div>
+      <span class="quiz-step" id="quizStep">1 of 15</span>
+    </div>
+
+    <div class="quiz-card" id="quizCard">
+      <p class="quiz-scenario" id="quizScenario"></p>
+      <div class="quiz-choices">
+        <button type="button" class="quiz-choice" id="choiceA" onclick="pickChoice('a')">
+          <span id="choiceAText"></span>
+        </button>
+        <span class="quiz-vs">or</span>
+        <button type="button" class="quiz-choice" id="choiceB" onclick="pickChoice('b')">
+          <span id="choiceBText"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="quiz-nav">
+      <button type="button" class="quiz-back hidden" id="quizBack" onclick="goBack()">&#8592; Back</button>
+    </div>
   </div>
-  {% endif %}
 
-  <form method="POST" action="{{ url_for('results') }}" class="weights-form" id="mainForm">
-    <div class="slider-row">
-      <label for="w_cost">Cost of Living <span id="costVal" class="slider-value">3</span></label>
-      <input id="w_cost" type="range" name="w_cost" min="0" max="5" value="3" oninput="costVal.textContent=this.value">
-      <p class="slider-help">Affordability</p>
-    </div>
+  <!-- ====== SUMMARY SCREEN ====== -->
+  <div id="quizSummary" class="quiz-screen quiz-summary">
+    <h2 id="profileTitle"></h2>
+    <p class="profile-desc" id="profileDesc"></p>
 
-    <div class="slider-row">
-      <label for="w_safety">Safety <span id="safetyVal" class="slider-value">3</span></label>
-      <input id="w_safety" type="range" name="w_safety" min="0" max="5" value="3" oninput="safetyVal.textContent=this.value">
-      <p class="slider-help">Low crime and personal safety</p>
-    </div>
+    <div class="weight-bars" id="weightBars"></div>
 
-    <div class="slider-row">
-      <label for="w_jobs">Jobs <span id="jobsVal" class="slider-value">3</span></label>
-      <input id="w_jobs" type="range" name="w_jobs" min="0" max="5" value="3" oninput="jobsVal.textContent=this.value">
-      <p class="slider-help">Job market strength</p>
-    </div>
+    <form method="POST" action="{{ url_for('results') }}" id="resultsForm">
+      <input type="hidden" name="w_cost" id="hw_cost" value="3">
+      <input type="hidden" name="w_safety" id="hw_safety" value="3">
+      <input type="hidden" name="w_jobs" id="hw_jobs" value="3">
+      <input type="hidden" name="w_weather" id="hw_weather" value="3">
+      <input type="hidden" name="w_lifestyle" id="hw_lifestyle" value="3">
+      <input type="hidden" name="country_filter" id="hw_country" value="">
+      <div class="summary-actions">
+        <button type="submit" class="btn primary">See My Cities</button>
+        <button type="button" class="btn ghost" onclick="retakeQuiz()">Retake Quiz</button>
+      </div>
+    </form>
+  </div>
 
-    <div class="slider-row">
-      <label for="w_weather">Weather <span id="weatherVal" class="slider-value">3</span></label>
-      <input id="w_weather" type="range" name="w_weather" min="0" max="5" value="3" oninput="weatherVal.textContent=this.value">
-      <p class="slider-help">Climate comfort</p>
-    </div>
-
-    <div class="slider-row">
-      <label for="w_lifestyle">Lifestyle <span id="lifeVal" class="slider-value">3</span></label>
-      <input id="w_lifestyle" type="range" name="w_lifestyle" min="0" max="5" value="3" oninput="lifeVal.textContent=this.value">
-      <p class="slider-help">Daily livability (environment + mobility)</p>
-    </div>
-
-    <div class="hero-actions">
-      <button type="submit" class="btn primary">See Results</button>
-    </div>
-  </form>
 </section>
 
 <script>
-  const importBtn = document.getElementById('importBtn');
-  if (importBtn) {
-    importBtn.addEventListener('click', async function () {
-      const status = document.getElementById('importStatus');
-      importBtn.disabled = true;
-      importBtn.textContent = 'Importing…';
-      status.textContent = '';
-      status.className = 'import-status';
+(function () {
+  /* ---- 15 tradeoff questions (each factor appears exactly 6 times) ---- */
+  var QUESTIONS = [
+    {
+      scenario: "You\u2019re apartment hunting\u2026",
+      a: { text: "Half the rent, but you\u2019re double-checking the locks", factor: "w_cost" },
+      b: { text: "Safe neighborhood, but your wallet is crying", factor: "w_safety" }
+    },
+    {
+      scenario: "Two job offers on the table\u2026",
+      a: { text: "Affordable city, limited career growth", factor: "w_cost" },
+      b: { text: "Expensive hub, but your career takes off", factor: "w_jobs" }
+    },
+    {
+      scenario: "Picking a climate\u2026",
+      a: { text: "Save money, but bundle up for brutal winters", factor: "w_cost" },
+      b: { text: "Sunshine year-round, premium prices", factor: "w_weather" }
+    },
+    {
+      scenario: "Friday night plans\u2026",
+      a: { text: "Cheap rent, Netflix is your nightlife", factor: "w_cost" },
+      b: { text: "Amazing food & culture scene, but pricey", factor: "w_lifestyle" }
+    },
+    {
+      scenario: "Career crossroads\u2026",
+      a: { text: "Safe & peaceful, but fewer job options", factor: "w_safety" },
+      b: { text: "Booming job market, rougher around the edges", factor: "w_jobs" }
+    },
+    {
+      scenario: "Choosing vibes\u2026",
+      a: { text: "Safe & cozy, but gray skies for months", factor: "w_safety" },
+      b: { text: "Sun-drenched streets, sketchier after dark", factor: "w_weather" }
+    },
+    {
+      scenario: "Neighborhood dilemma\u2026",
+      a: { text: "Quiet suburb, asleep by 10pm", factor: "w_safety" },
+      b: { text: "Vibrant downtown, stay street-smart", factor: "w_lifestyle" }
+    },
+    {
+      scenario: "Work-life balance\u2026",
+      a: { text: "Dream job in a foggy, cold city", factor: "w_jobs" },
+      b: { text: "Beach town vibes, freelance hustle", factor: "w_weather" }
+    },
+    {
+      scenario: "Life priorities\u2026",
+      a: { text: "Great salary, boring suburbia", factor: "w_jobs" },
+      b: { text: "Creative scene, unpredictable income", factor: "w_lifestyle" }
+    },
+    {
+      scenario: "The classic tradeoff\u2026",
+      a: { text: "72\u00b0 every day, but nothing to do", factor: "w_weather" },
+      b: { text: "Wild seasons, world-class culture", factor: "w_lifestyle" }
+    },
+    /* ---- Round 2: 5 repeat pairs, fresh scenarios ---- */
+    {
+      scenario: "Moving for work\u2026",
+      a: { text: "Remote gig from a cheap mountain town", factor: "w_cost" },
+      b: { text: "Relocate to a pricey hub for the dream role", factor: "w_jobs" }
+    },
+    {
+      scenario: "Weekend priorities\u2026",
+      a: { text: "Walk anywhere at night, but pack an umbrella", factor: "w_safety" },
+      b: { text: "Beach every weekend, lock up your bike though", factor: "w_weather" }
+    },
+    {
+      scenario: "Building your social life\u2026",
+      a: { text: "Potluck dinners, thriving savings account", factor: "w_cost" },
+      b: { text: "Michelin restaurants and live jazz, worth every penny", factor: "w_lifestyle" }
+    },
+    {
+      scenario: "New city, fresh start\u2026",
+      a: { text: "Sleepy college town, everyone waves hello", factor: "w_safety" },
+      b: { text: "Major metro, networking events every night", factor: "w_jobs" }
+    },
+    {
+      scenario: "The dealbreaker\u2026",
+      a: { text: "Endless summer, but you\u2019ve tried every restaurant twice", factor: "w_weather" },
+      b: { text: "Snow in April, but there\u2019s a festival every weekend", factor: "w_lifestyle" }
+    }
+  ];
 
-      try {
-        const body = new URLSearchParams({ limit: 20, country: 'United States' });
-        const res = await fetch('/import/cities', { method: 'POST', body });
-        const data = await res.json();
+  var PROFILES = {
+    w_cost:      { name: "The Budget Explorer",  desc: "You know the best things in life are free \u2014 or at least affordable. You\u2019ll find the hidden gems others overlook." },
+    w_safety:    { name: "The Peace Seeker",      desc: "Sleep with the windows open, walk home at midnight. You know peace of mind is priceless." },
+    w_jobs:      { name: "The Career Climber",    desc: "Opportunity knocks and you answer. Your city is a launchpad, not just a home." },
+    w_weather:   { name: "The Sun Chaser",        desc: "Life\u2019s too short for gray skies. You follow the warmth and never look back." },
+    w_lifestyle: { name: "The Culture Vulture",   desc: "Museums, restaurants, live music, street art \u2014 your city needs a pulse." }
+  };
 
-        if (data.ok) {
-          status.textContent = `Done — ${data.imported} added, ${data.updated} updated.`;
-          status.className = 'import-status ok';
-          // refresh badge
-          const badge = document.querySelector('.city-count-badge');
-          if (badge) {
-            const total = (parseInt(badge.textContent) || 0) + data.imported;
-            badge.textContent = total + ' cities in database';
-          }
-        } else {
-          status.textContent = 'Error: ' + (data.error || 'unknown');
-          status.className = 'import-status err';
-        }
-      } catch (e) {
-        status.textContent = 'Network error.';
-        status.className = 'import-status err';
-      } finally {
-        importBtn.disabled = false;
-        importBtn.textContent = 'Import US Cities';
+  var LABELS = {
+    w_cost: "Cost",
+    w_safety: "Safety",
+    w_jobs: "Jobs",
+    w_weather: "Weather",
+    w_lifestyle: "Culture"
+  };
+
+  var TOTAL = QUESTIONS.length;
+  var APPEARANCES = 6; /* each factor appears in 6 questions */
+
+  /* ---- State ---- */
+  var currentQ = 0;
+  var scores = { w_cost: 0, w_safety: 0, w_jobs: 0, w_weather: 0, w_lifestyle: 0 };
+  var history = [];
+  var transitioning = false;
+
+  /* ---- DOM refs ---- */
+  var welcomeEl   = document.getElementById('quizWelcome');
+  var questionsEl = document.getElementById('quizQuestions');
+  var summaryEl   = document.getElementById('quizSummary');
+  var cardEl      = document.getElementById('quizCard');
+  var scenarioEl  = document.getElementById('quizScenario');
+  var choiceABtn  = document.getElementById('choiceA');
+  var choiceBBtn  = document.getElementById('choiceB');
+  var choiceAText = document.getElementById('choiceAText');
+  var choiceBText = document.getElementById('choiceBText');
+  var progressEl  = document.getElementById('progressFill');
+  var stepEl      = document.getElementById('quizStep');
+  var backBtn     = document.getElementById('quizBack');
+
+  /* ---- Screen switching ---- */
+  function showScreen(el) {
+    [welcomeEl, questionsEl, summaryEl].forEach(function (s) { s.classList.remove('active'); });
+    el.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  /* ---- Render question ---- */
+  function renderQuestion(index) {
+    var q = QUESTIONS[index];
+    scenarioEl.textContent = q.scenario;
+    choiceAText.textContent = q.a.text;
+    choiceBText.textContent = q.b.text;
+    choiceABtn.classList.remove('chosen');
+    choiceBBtn.classList.remove('chosen');
+    progressEl.style.width = ((index / TOTAL) * 100) + '%';
+    stepEl.textContent = (index + 1) + ' of ' + TOTAL;
+    backBtn.classList.toggle('hidden', index === 0);
+  }
+
+  /* ---- Public: start quiz ---- */
+  window.startQuiz = function () {
+    currentQ = 0;
+    scores = { w_cost: 0, w_safety: 0, w_jobs: 0, w_weather: 0, w_lifestyle: 0 };
+    history = [];
+    renderQuestion(0);
+    showScreen(questionsEl);
+  };
+
+  /* ---- Public: pick a choice ---- */
+  window.pickChoice = function (side) {
+    if (transitioning) return;
+    transitioning = true;
+
+    var q = QUESTIONS[currentQ];
+    var factor = side === 'a' ? q.a.factor : q.b.factor;
+    var btn = side === 'a' ? choiceABtn : choiceBBtn;
+
+    scores[factor]++;
+    history.push({ factor: factor });
+    btn.classList.add('chosen');
+
+    setTimeout(function () {
+      currentQ++;
+      if (currentQ < TOTAL) {
+        cardEl.classList.add('exit');
+        setTimeout(function () {
+          renderQuestion(currentQ);
+          cardEl.classList.remove('exit');
+          cardEl.classList.add('enter');
+          void cardEl.offsetHeight;
+          cardEl.classList.remove('enter');
+          transitioning = false;
+        }, 250);
+      } else {
+        showSummary();
+        transitioning = false;
+      }
+    }, 300);
+  };
+
+  /* ---- Public: go back ---- */
+  window.goBack = function () {
+    if (currentQ <= 0 || transitioning) return;
+    var last = history.pop();
+    scores[last.factor]--;
+    currentQ--;
+
+    cardEl.classList.add('enter');
+    setTimeout(function () {
+      renderQuestion(currentQ);
+      cardEl.classList.remove('enter');
+      void cardEl.offsetHeight;
+    }, 10);
+  };
+
+  /* ---- Public: retake ---- */
+  window.retakeQuiz = function () {
+    currentQ = 0;
+    scores = { w_cost: 0, w_safety: 0, w_jobs: 0, w_weather: 0, w_lifestyle: 0 };
+    history = [];
+    renderQuestion(0);
+    showScreen(questionsEl);
+  };
+
+  /* ---- Show summary ---- */
+  function showSummary() {
+    var weights = {};
+    var maxFactor = 'w_cost';
+    var maxVal = -1;
+    var factors = ['w_cost', 'w_safety', 'w_jobs', 'w_weather', 'w_lifestyle'];
+
+    factors.forEach(function (f) {
+      /* Map 0-6 wins to 1-5 weight */
+      weights[f] = Math.round(scores[f] / APPEARANCES * 4) + 1;
+      if (scores[f] > maxVal) {
+        maxVal = scores[f];
+        maxFactor = f;
       }
     });
+
+    /* Fill hidden form */
+    factors.forEach(function (f) {
+      document.getElementById('hw_' + f.substring(2)).value = weights[f];
+    });
+
+    /* Country filter */
+    var countryEl = document.getElementById('countryFilter');
+    document.getElementById('hw_country').value = countryEl ? countryEl.value : '';
+
+    /* Profile */
+    var profile = PROFILES[maxFactor];
+    document.getElementById('profileTitle').textContent = profile.name;
+    document.getElementById('profileDesc').textContent = profile.desc;
+
+    /* Weight bars sorted descending */
+    var sorted = factors.slice().sort(function (a, b) { return weights[b] - weights[a]; });
+    var barsHtml = '';
+    sorted.forEach(function (f) {
+      var pct = (weights[f] / 5) * 100;
+      barsHtml += '<div class="weight-bar-row">' +
+        '<span class="weight-bar-label">' + LABELS[f] + '</span>' +
+        '<div class="weight-bar-track"><div class="weight-bar-fill" data-width="' + pct + '%"></div></div>' +
+        '<span class="weight-bar-val">' + weights[f] + '/5</span>' +
+        '</div>';
+    });
+    document.getElementById('weightBars').innerHTML = barsHtml;
+
+    showScreen(summaryEl);
+    progressEl.style.width = '100%';
+
+    setTimeout(function () {
+      document.querySelectorAll('.weight-bar-fill').forEach(function (el) {
+        el.style.width = el.getAttribute('data-width');
+      });
+    }, 100);
   }
+
+})();
 </script>
 {% endblock %}
