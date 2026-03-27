@@ -51,7 +51,6 @@
     <h1>Find Your<br><span class="accent">Perfect City</span></h1>
     <p class="quiz-subtitle">Answer 15 quick tradeoffs. We'll figure out what actually matters to you.</p>
 
-    {% if countries %}
     <div class="country-filter-wrap">
       <label for="countryFilter">Narrow by country</label>
       <select id="countryFilter" class="country-select">
@@ -61,7 +60,6 @@
         {% endfor %}
       </select>
     </div>
-    {% endif %}
 
     <button type="button" class="btn primary" onclick="startQuiz()">Start the Quiz</button>
   </div>
