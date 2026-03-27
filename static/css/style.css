@@ -60,6 +60,7 @@
 body {
   margin: 0;
   font-family: var(--font-body);
+  font-size: 110%;
   color: var(--text);
   background-color: var(--bg);
   background-image: radial-gradient(var(--bg-dots) 1px, transparent 1px);
