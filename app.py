@@ -1,6 +1,6 @@
 import json
 import math
-import os
+import os  # noqa: F401
 from datetime import datetime, timedelta, timezone
 from statistics import mean
 
